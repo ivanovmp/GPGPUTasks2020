@@ -4,3 +4,5 @@
 
  - [Задание 0](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task00): Вводное.
  - [Задание 1](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task01): A+B.
+ - Задание 2: Теоретическое задание: параллелизуемость/code divergence/memory coalesced access (сдача через сайт CSC).
+ - [Задание 3](https://github.com/GPGPUCourse/GPGPUTasks2020/tree/task03): Фрактал Мандельброта. Сумма чисел. Максимальный по сумме префикс.
