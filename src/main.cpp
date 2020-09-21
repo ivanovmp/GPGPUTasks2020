@@ -109,10 +109,10 @@ int main()
     // TODO 10 Выставите все аргументы в кернеле через clSetKernelArg (as_gpu, bs_gpu, cs_gpu и число значений, убедитесь, что тип количества элементов такой же в кернеле)
     {
         // unsigned int i = 0;
-        // clSetKernelArg(kernel, i++, ..., ...));
-        // clSetKernelArg(kernel, i++, ..., ...));
-        // clSetKernelArg(kernel, i++, ..., ...));
-        // clSetKernelArg(kernel, i++, ..., ...));
+        // clSetKernelArg(kernel, i++, ..., ...);
+        // clSetKernelArg(kernel, i++, ..., ...);
+        // clSetKernelArg(kernel, i++, ..., ...);
+        // clSetKernelArg(kernel, i++, ..., ...);
     }
 
     // TODO 11 Выше увеличьте n с 1000*1000 до 100*1000*1000 (чтобы дальнейшие замеры были ближе к реальности)
