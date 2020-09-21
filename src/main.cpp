@@ -104,7 +104,7 @@ int main()
     cl_command_queue command_queue = clCreateCommandQueue(context, chosen_device, 0, &error_code);
     OCL_SAFE_CALL(error_code);
 
-    unsigned int n = 100*1000*1000;
+    unsigned int n = 500*1000*1000;
     // Создаем два массива псевдослучайных данных для сложения и массив для будущего хранения результата
     std::vector<float> as(n, 0);
     std::vector<float> bs(n, 0);
@@ -223,7 +223,7 @@ int main()
         // - Флопс - это число операций с плавающей точкой в секунду
         // - В гигафлопсе 10^9 флопсов
         // - Среднее время выполнения кернела равно t.lapAvg() секунд
-        std::cout << "GFlops: " << t.lapAvg() * 1e-9 << std::endl;
+        std::cout << "GFlops: " << n * 1e-9 / t.lapAvg() << std::endl;
 
         // TODO 14 Рассчитайте используемую пропускную способность обращений к видеопамяти (в гигабайтах в секунду)
         // - Всего элементов в массивах по n штук
@@ -255,12 +255,12 @@ int main()
         }
     }
 
-    clReleaseEvent(save_to_a_buffer);
-    clReleaseEvent(save_to_b_buffer);
-    clReleaseKernel(kernel);
-    clReleaseProgram(program);
-    clReleaseCommandQueue(command_queue);
-    clReleaseContext(context);
+    OCL_SAFE_CALL(clReleaseEvent(save_to_a_buffer));
+    OCL_SAFE_CALL(clReleaseEvent(save_to_b_buffer));
+    OCL_SAFE_CALL(clReleaseKernel(kernel));
+    OCL_SAFE_CALL(clReleaseProgram(program));
+    OCL_SAFE_CALL(clReleaseCommandQueue(command_queue));
+    OCL_SAFE_CALL(clReleaseContext(context));
 
     return 0;
 }
