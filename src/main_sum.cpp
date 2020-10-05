@@ -1,6 +1,8 @@
 #include <libutils/misc.h>
 #include <libutils/timer.h>
 #include <libutils/fast_random.h>
+#include <libgpu/context.h>
+#include <libgpu/shared_device_buffer.h>
 
 
 template<typename T>
@@ -59,6 +61,29 @@ int main(int argc, char **argv)
 
     {
         // TODO: implement on OpenCL
-        // gpu::Device device = gpu::chooseGPUDevice(argc, argv);
+        gpu::Device device = gpu::chooseGPUDevice(argc, argv);
+        gpu::gpu_mem_32u* as_gpu = new gpu::gpu_mem_32u();
+        as_gpu->resizeN(n);
+        as_gpu->writeN(as.data(), n);
+        ocl::Kernel sum(sum_kernel, sum_kernel_length, "sum");
+        sum.compile();
+        const unsigned int workGroupSize = 128;
+
+        timer t;
+        for (int iter = 0; iter < benchmarkingIters; ++iter)
+        {
+            unsigned int current_size = n;
+            while (current_size > 1)
+            {
+                unsigned int new_size = (current_size - 1) / workGroupSize + 1;
+                gpu::gpu_mem_32u* bs_gpu = new gpu::gpu_mem_32u();
+                bs_gpu->resizeN(new_size);
+                unsigned int global_work_size = (n + workGroupSize - 1) / workGroupSize * workGroupSize;
+                sum.exec(gpu::WorkSize(workGroupSize, global_work_size), as_gpu, bs_gpu, current_size);
+                delete as_gpu;
+                as_gpu = bs_gpu;
+                current_size = new_size;
+            }
+        }
     }
 }
