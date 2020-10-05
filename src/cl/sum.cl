@@ -4,21 +4,25 @@
 
 #line 6
 
-const unsigned int workGroupSize = 128;
+#define workGroupSize 128
 
 __kernel void sum(__global const unsigned* a,
-    __local unsigned* b,
+    __global unsigned* b,
     unsigned int n)
 {
-    const unsigned int index = get_global_id(0);
-
-    if (index >= n)
-        return;
-
-    if (index == 0) {
-        // Если бы printf был не под if, то printf попытался бы исполниться для всех запущенных workItems
-        printf("Just example of printf usage: WARP_SIZE=%d\n", WARP_SIZE);
+    __local unsigned c[workGroupSize];
+    const unsigned index = get_global_id(0);
+    const unsigned local_index = get_local_id(0);
+    const unsigned group_index = get_group_id(0);
+    c[local_index] = (index < n) ? a[index] : 0;
+    barrier(CLK_LOCAL_MEM_FENCE);
+    if (index < n)
+    {
+        if (local_index == 0)
+        {
+            for (unsigned i = 1; i < workGroupSize; ++i)
+                c[0] += c[i];
+            b[group_index] = c[0];
+        }
     }
-
-    c[index] = a[index] + b[index];
 }
