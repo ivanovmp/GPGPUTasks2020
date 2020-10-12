@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     context.init(device.device_id_opencl);
     context.activate();
 
-    int benchmarkingIters = 10; // TODO пока тестируетесь удобно выставить единицу
+    int benchmarkingIters = 16; // TODO пока тестируетесь удобно выставить единицу
     unsigned int M = 1024;
     unsigned int K = 1024;
     unsigned int N = 1024;
@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 
     const std::vector<float> cs_cpu_reference = cs;
 
-    /*
+
     gpu::gpu_mem_32f as_gpu, bs_gpu, cs_gpu;
     as_gpu.resizeN(M*K);
     bs_gpu.resizeN(K*N);
@@ -74,9 +74,12 @@ int main(int argc, char **argv)
         timer t;
         for (int iter = 0; iter < benchmarkingIters; ++iter) {
             // TODO
-            unsigned int work_group_size = 128;
-            unsigned int global_work_size = ...;
-            matrix_multiplication_kernel.exec(gpu::WorkSize(work_group_size, global_work_size), as_gpu, bs_gpu, cs_gpu, M, K, N);
+            unsigned int S = 16;
+            unsigned int work_group_size_X = S;
+            unsigned int work_group_size_Y = S;
+            unsigned int global_work_size_X = (K + work_group_size_X - 1) / work_group_size_X * work_group_size_X;
+            unsigned int global_work_size_Y = (M + work_group_size_Y - 1) / work_group_size_Y * work_group_size_Y;
+            matrix_multiplication_kernel.exec(gpu::WorkSize(work_group_size_X, work_group_size_Y, global_work_size_X, global_work_size_Y), as_gpu, bs_gpu, cs_gpu, M, K, N);
 
             t.nextLap();
         }
@@ -85,7 +88,6 @@ int main(int argc, char **argv)
     }
 
     cs_gpu.readN(cs.data(), M*N);
-    */
 
     // Проверяем корректность результатов
     double diff_sum = 0;
