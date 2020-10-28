@@ -4,7 +4,7 @@
 #include <libgpu/context.h>
 #include <libgpu/shared_device_buffer.h>
 
-// Р­С‚РѕС‚ С„Р°Р№Р» Р±СѓРґРµС‚ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РІ РјРѕРјРµРЅС‚ СЃР±РѕСЂРєРё - СЃРј. convertIntoHeader РІ CMakeLists.txt:18
+// Этот файл будет сгенерирован автоматически в момент сборки - см. convertIntoHeader в CMakeLists.txt:18
 #include "cl/radix_cl.h"
 
 #include <vector>
@@ -84,6 +84,7 @@ int main(int argc, char **argv)
         prefix_sums_creator.compile();
         radix_sorter.compile();
 
+
         gpu::gpu_mem_32u* as_gpu = new gpu::gpu_mem_32u(), * as_gpu_temp = new gpu::gpu_mem_32u();
 
         as_gpu->resizeN(n);
@@ -107,15 +108,26 @@ int main(int argc, char **argv)
         timer t;
         for (int iter = 0; iter < benchmarkingIters; ++iter) {
             as_gpu->writeN(as.data(), n);
-            t.restart(); // Р—Р°РїСѓСЃРєР°РµРј СЃРµРєСѓРЅРґРѕРјРµСЂ РїРѕСЃР»Рµ РїСЂРѕРіСЂСѓР·РєРё РґР°РЅРЅС‹С…, С‡С‚РѕР±С‹ Р·Р°РјРµСЂСЏС‚СЊ РІСЂРµРјСЏ СЂР°Р±РѕС‚С‹ РєРµСЂРЅРµР»Р°, Р° РЅРµ С‚СЂР°РЅСЃС„РµСЂ РґР°РЅРЅС‹С…
+            t.restart(); // Запускаем секундомер после прогрузки данных, чтобы замерять время работы кернела, а не трансфер данных
 
             for (int p = 0; p < 32; p += k)
             {
                 int b = std::min(k, 32 - p);
-                // РќР°РґРѕ РѕС‚СЃРѕСЂС‚РёСЂРѕРІР°С‚СЊ as_gpu РїРѕ Р±РёС‚Р°Рј p, ..., p + b - 1
-                // Р”Р»СЏ РЅР°С‡Р°Р»Р° РЅР°РґРѕ РѕСЃСѓС‰РµСЃС‚РІРёС‚СЊ РїРѕРґСЃС‡С‘С‚
+#ifdef DEB
+                std::cout << "Step " << p;
+                std::vector<unsigned> vv;
+                std::cout << " (with " << b << " bits):\n";
+                std::cout << '\t' << "Array: ";
+                vv.resize(n);
+                as_gpu->readN(vv.data(), n);
+                for (int i = 0; i < n; ++i)
+                    std::cout << vv[i] << " \n"[i == n - 1];
+#endif
 
-                // // Р­С‚Рѕ СЃРїРѕСЃРѕР± СЃ Р±РѕР»СЊС€РёРј РєРѕР»РёС‡РµСЃС‚РІРѕРј РѕР±СЂР°С‰РµРЅРёР№ Рє РІРЅРµС€РЅРµР№ РїР°РјСЏС‚Рё. РўР°Рє РЅРµР»СЊР·СЏ, С‚Р°Рє С‡С‚Рѕ РјС‹ Р±СѓРґРµРј РµРіРѕ СѓСЃРєРѕСЂСЏС‚СЊ.
+                // Надо отсортировать as_gpu по битам p, ..., p + b - 1
+                // Для начала надо осуществить подсчёт
+
+                // // Это способ с большим количеством обращений к внешней памяти. Так нельзя, так что мы будем его ускорять.
                 // distributor.exec(gpu::WorkSize(work_group_size, round_up(n, work_group_size)), *as_gpu, block_sums.front(), n, memory_sizes.front(), p, b);
                 // for (int i = 1; i < block_sums.size(); ++i)
                 //    block_creator.exec(gpu::WorkSize(work_group_size, 1, round_up(block_numbers[i - 1], work_group_size), 1 << b), block_sums[i - 1], block_sums[i], block_numbers[i - 1], memory_sizes[i - 1], memory_sizes[i]);
@@ -124,19 +136,82 @@ int main(int argc, char **argv)
                 smart_distributor.exec(gpu::WorkSize(work_group_size, round_up(n, work_group_size)), *as_gpu, block_sums[1], n, memory_sizes[1], p, b);
                 for (int i = 2; i < block_sums.size(); ++i)
                    block_creator.exec(gpu::WorkSize(work_group_size, 1, round_up(block_numbers[i - 1], work_group_size), 1 << b), block_sums[i - 1], block_sums[i], block_numbers[i - 1], memory_sizes[i - 1], memory_sizes[i]);
+
+#ifdef DEB
+                std::cout << '\t' << "Block sums:\n";
+                for (int i = 0; i < block_sums.size(); ++i)
+                {
+                    std::cout << '\t' << '\t' << i << ":\n";
+                    vv.resize(memory_sizes[i] << k);
+                    block_sums[i].readN(vv.data(), memory_sizes[i] << k);
+                    for (int j = 0; j < (1 << k); ++j)
+                    {
+                        std::cout << '\t' << '\t' << '\t' << j << ": ";
+                        for (int l = 0; l < memory_sizes[i]; ++l)
+                            std::cout << vv[j * memory_sizes[i] + l] << " \n"[l == memory_sizes[i] - 1];
+                    }
+                }
+#endif
+
                 zero_adder.exec(gpu::WorkSize(work_group_size, round_up(1 << b, work_group_size)), block_sums.back(), b, basket_sums);
+
                 for (int i = block_sums.size() - 1; i >= 2; --i)
                     prefix_sums_creator.exec(gpu::WorkSize(work_group_size, 1, memory_sizes[i - 1], 1 << b), block_sums[i - 1], block_sums[i], block_numbers[i - 1], memory_sizes[i - 1], memory_sizes[i]);
+
+#ifdef DEB
+                std::cout << '\t' << "After videocard:\n";
+                for (int i = 0; i < block_sums.size(); ++i)
+                {
+                    std::cout << '\t' << '\t' << i << ":\n";
+                    vv.resize(memory_sizes[i] << k);
+                    block_sums[i].readN(vv.data(), memory_sizes[i] << k);
+                    for (int j = 0; j < (1 << k); ++j)
+                    {
+                        std::cout << '\t' << '\t' << '\t' << j << ": ";
+                        for (int l = 0; l < memory_sizes[i]; ++l)
+                            std::cout << vv[j * memory_sizes[i] + l] << " \n"[l == memory_sizes[i] - 1];
+                    }
+                }
+                std::cout << '\t' << "Basket sums: ";
+                vv.resize(1 << b);
+                basket_sums.readN(vv.data(), 1 << b);
+                for (int i = 0; i < (1 << b); ++i)
+                    std::cout << vv[i] << " \n"[i == ((1 << b) - 1)];
+#endif
+
                 radix_sorter.exec(gpu::WorkSize(work_group_size, round_up(n, work_group_size)), *as_gpu, *as_gpu_temp, block_sums[1], basket_sums, n, memory_sizes[1], p, b);
                 std::swap(as_gpu, as_gpu_temp);
+#ifdef DEB
+
+                std::cout << "     ";
+                vv.resize(n);
+                as_gpu->readN(vv.data(), n);
+                for (int J = 0; J < n; ++J)
+                    std::cout << vv[J] << " \n"[J == n - 1];
+
+                std::cout << "bask:";
+                vv.resize(n);
+                as_gpu->readN(vv.data(), n);
+                for (int J = 0; J < n; ++J)
+                    std::cout << vv[J] << " \n"[J == n - 1];
+#endif
             }
             t.nextLap();
         }
         block_sums.clear();
         std::cout << "GPU, dividing into blocks of " << k << " bits: " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
         std::cout << "GPU, dividing into blocks of " << k << " bits: " << (n / 1000 / 1000) / t.lapAvg() << " millions/s" << std::endl;
+
         as_gpu->readN(as.data(), n);
-        // РџСЂРѕРІРµСЂСЏРµРј РєРѕСЂСЂРµРєС‚РЅРѕСЃС‚СЊ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ
+#ifdef DEB
+        std::cout << "       vector: ";
+        for (int I = 0; I < n; ++I)
+            std::cout << as[I] << " \n"[I == n - 1];
+        std::cout << "sorted vector: ";
+        for (int I = 0; I < n; ++I)
+            std::cout << cpu_sorted[I] << " \n"[I == n - 1];
+#endif
+        // Проверяем корректность результатов
         for (int i = 0; i < n; ++i) {
             EXPECT_THE_SAME(as[i], cpu_sorted[i], "GPU results should be equal to CPU results!");
         }
