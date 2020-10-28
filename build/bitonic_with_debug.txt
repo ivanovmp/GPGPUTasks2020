@@ -4,7 +4,7 @@
 #include <libgpu/context.h>
 #include <libgpu/shared_device_buffer.h>
 
-// Р­С‚РѕС‚ С„Р°Р№Р» Р±СѓРґРµС‚ СЃРіРµРЅРµСЂРёСЂРѕРІР°РЅ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РІ РјРѕРјРµРЅС‚ СЃР±РѕСЂРєРё - СЃРј. convertIntoHeader РІ CMakeLists.txt:18
+// Этот файл будет сгенерирован автоматически в момент сборки - см. convertIntoHeader в CMakeLists.txt:18
 #include "cl/bitonic_cl.h"
 
 #include <vector>
@@ -31,10 +31,9 @@ int main(int argc, char** argv)
     context.init(device.device_id_opencl);
     context.activate();
 
-    int benchmarkingIters = 100;
-    std::cout << "We will run " << benchmarkingIters << " iterations in each configuration.\n";
-    unsigned int n = 32 * 1024 * 1024; // РЈРІС‹ Рё Р°С…. РЇ Р±СѓРґСѓ РїРѕР»СЊР·РѕРІР°С‚СЊСЃСЏ С‚РµРј, С‡С‚Рѕ С‚СѓС‚ СЃС‚РµРїРµРЅСЊ РґРІРѕР№РєРё, РїРѕС‚РѕРјСѓ С‡С‚Рѕ РёРЅР°С‡Рµ Р±СѓРґРµС‚ РѕС‡РµРЅСЊ РЅРµСѓРґРѕР±РЅРѕ.
-                                       // РљСЂРѕРјРµ С‚РѕРіРѕ, n Р±РѕР»СЊС€Рµ СЂР°Р·РјРµСЂР° workGroup С…РѕС‚СЏ Р±С‹ РІ РґРІР° СЂР°Р·Р°. Р§С‚Рѕ РїРѕРґРµР»Р°С‚СЊ!
+    int benchmarkingIters = 1;
+    unsigned int n = 32; // Увы и ах. Я буду пользоваться тем, что тут степень двойки, потому что иначе будет очень неудобно.
+                                       // Кроме того, n больше размера workGroup хотя бы в два раза. Что поделать!
     std::vector<float> as(n, 0);
     FastRandom r(n);
     for (unsigned int i = 0; i < n; ++i) {
@@ -55,9 +54,8 @@ int main(int argc, char** argv)
     }
     gpu::gpu_mem_32f as_gpu;
     as_gpu.resizeN(n);
-    for (unsigned work_group_size_log = 0; work_group_size_log <= 8; ++work_group_size_log)
+    for (unsigned work_group_size_log = 2; work_group_size_log <= 2; ++work_group_size_log)
     {
-        std::cout << '\n';
         unsigned work_group_size = 1 << work_group_size_log;
         const std::string defines = "-D WORK_GROUP_SIZE=" + std::to_string(work_group_size) + " -D WORK_GROUP_SIZE_LOG=" + std::to_string(work_group_size_log);
         ocl::Kernel bitonic_left(bitonic_kernel, bitonic_kernel_length, "bitonic_left", defines);
@@ -70,22 +68,57 @@ int main(int argc, char** argv)
         timer t;
         for (int iter = 0; iter < benchmarkingIters; ++iter) {
             as_gpu.writeN(as.data(), n);
-            t.restart(); // Р—Р°РїСѓСЃРєР°РµРј СЃРµРєСѓРЅРґРѕРјРµСЂ РїРѕСЃР»Рµ РїСЂРѕРіСЂСѓР·РєРё РґР°РЅРЅС‹С…, С‡С‚РѕР±С‹ Р·Р°РјРµСЂСЏС‚СЊ РІСЂРµРјСЏ СЂР°Р±РѕС‚С‹ РєРµСЂРЅРµР»Р°, Р° РЅРµ С‚СЂР°РЅСЃС„РµСЂ РґР°РЅРЅС‹С…
+            std::vector<float> bs(n);
+            t.restart(); // Запускаем секундомер после прогрузки данных, чтобы замерять время работы кернела, а не трансфер данных
+
+            std::cout << '\t';
+            as_gpu.readN(bs.data(), n);
+            for (int j = 0; j < n; ++j)
+                std::cout << bs[j] << " \n"[j == n - 1];
+
             bitonic_left.exec(gpu::WorkSize(work_group_size, n >> 1), as_gpu);
+
+            std::cout << '\t';
+            as_gpu.readN(bs.data(), n);
+            for (int j = 0; j < n; ++j)
+                std::cout << bs[j] << " \n"[j == n - 1];
+
             for (unsigned i = work_group_size_log + 1; (1 << i) < n; ++i)
             {
+                std::cout << '\t' << (1 << i) << ':' << '\n';
                 for (unsigned j = i; j > work_group_size_log; --j)
+                {
                     bitonic_middle.exec(gpu::WorkSize(work_group_size, n >> 1), as_gpu, j, i);
+
+                    std::cout << '\t' << '\t' << (1 << j) << ": ";
+                    as_gpu.readN(bs.data(), n);
+                    for (int j = 0; j < n; ++j)
+                        std::cout << bs[j] << " \n"[j == n - 1];
+                }
+
                 bitonic_right.exec(gpu::WorkSize(work_group_size, n >> 1), as_gpu, i);
+
+                std::cout << '\t' << '\t';
+                as_gpu.readN(bs.data(), n);
+                for (int j = 0; j < n; ++j)
+                    std::cout << bs[j] << " \n"[j == n - 1];
+
             }
 
             t.nextLap();
         }
         std::cout << "GPU with workGroup = " << work_group_size << ": " << t.lapAvg() << "+-" << t.lapStd() << " s" << std::endl;
         std::cout << "GPU with workGroup = " << work_group_size << ": " << (n / 1000 / 1000) / t.lapAvg() << " millions/s" << std::endl;
+
         as_gpu.readN(as.data(), n);
     }
-    // РџСЂРѕРІРµСЂСЏРµРј РєРѕСЂСЂРµРєС‚РЅРѕСЃС‚СЊ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ
+
+    // Проверяем корректность результатов
+    for (int j = 0; j < n; ++j)
+        std::cout << as[j] << " \n"[j == n - 1];
+    for (int j = 0; j < n; ++j)
+        std::cout << cpu_sorted[j] << " \n"[j == n - 1];
+
     for (int i = 0; i < n; ++i) {
         EXPECT_THE_SAME(as[i], cpu_sorted[i], "GPU results should be equal to CPU results!");
     }
